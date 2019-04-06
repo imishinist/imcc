@@ -6,10 +6,11 @@ use std::error;
 use std::fmt;
 use core::borrow::Borrow;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum TokenType {
     NUM,
     Symbol(char),
+    Ident,
     EOF,
 }
 
@@ -34,6 +35,14 @@ impl Token {
             ty: TokenType::Symbol(sym),
             val: 0,
             input: sym.to_string(),
+        }
+    }
+
+    fn with_ident(message: String) -> Self {
+        Token {
+            ty: TokenType::Ident,
+            val: 0,
+            input: message,
         }
     }
 
@@ -74,14 +83,15 @@ impl<'a> Tokenizer<'a> {
                 continue;
             }
 
-            if c == '(' || c == ')' {
-
-            }
-
             if c == '+' || c == '-' || c == '(' || c == ')'
-             || c == '*' || c == '/' {
+             || c == '*' || c == '/' || c == ';' || c == '=' {
                 let token = Token::with_symbol(c);
                 tokens.push(token);
+                continue;
+            }
+
+            if c.is_alphabetic() {
+                tokens.push(Token::with_ident(c.to_string()));
                 continue;
             }
 
@@ -94,7 +104,7 @@ impl<'a> Tokenizer<'a> {
                 continue;
             }
 
-            eprintln!("トークナイズできません: {}", "");
+            eprintln!("トークナイズできません: {}", c.to_string());
             std::process::exit(1);
         }
 
@@ -163,6 +173,32 @@ impl Parser {
         }
     }
 
+    fn program(&mut self) -> Result<Vec<Node>, ParserError> {
+        let mut code = Vec::new();
+        loop {
+            if self.tokens[self.pos].ty == TokenType::EOF { break }
+            code.push(self.stmt()?);
+        }
+        Ok(code)
+    }
+
+    fn stmt(&mut self) -> Result<Node, ParserError> {
+        let node = self.assign()?;
+        if !self.consume(TokenType::Symbol(';')) {
+            let message = self.tokens[self.pos].input.clone();
+            return Err(ParserError::UnexpectedToken(message));
+        }
+        Ok(node)
+    }
+
+    fn assign(&mut self) -> Result<Node, ParserError> {
+        let mut node = self.add()?;
+        if self.consume(TokenType::Symbol('=')) {
+            node = Node::new_node(TokenType::Symbol('='), Rc::new(node), Rc::new(self.assign()?));
+        }
+        Ok(node)
+    }
+
     fn add(&mut self) -> Result<Node, ParserError> {
         let mut node = self.mul()?;
 
@@ -193,7 +229,7 @@ impl Parser {
 
     fn term(&mut self) -> Result<Node, ParserError> {
         if self.consume(TokenType::Symbol('(')) {
-            let node = self.add();
+            let node = self.assign();
             if !self.consume(TokenType::Symbol(')')) {
                 let message = self.tokens[self.pos].input.clone();
                 return Err(ParserError::UnexpectedToken(message));
@@ -204,6 +240,12 @@ impl Parser {
             let pos = self.pos;
             self.pos += 1;
             return Ok(Node::new_node_num(self.tokens[pos].val));
+        }
+        if self.tokens[self.pos].ty == TokenType::Ident {
+            let pos = self.pos;
+            self.pos += 1;
+            let name = self.tokens[pos].input.as_bytes()[0];
+            return Ok(Node::new_node_ident(name as char));
         }
 
         let message = self.tokens[self.pos].input.clone();
@@ -219,12 +261,13 @@ impl Parser {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Node {
     ty: TokenType,
     lhs: Option<Rc<Node>>,
     rhs: Option<Rc<Node>>,
     val: i32,
+    name: char,
 }
 
 impl Node {
@@ -234,6 +277,17 @@ impl Node {
             lhs: Some(lhs),
             rhs: Some(rhs),
             val: 0,
+            name: 0 as char,
+        }
+    }
+
+    fn new_node_ident(name: char) -> Node {
+        Node {
+            ty: TokenType::Ident,
+            lhs: None,
+            rhs: None,
+            val: 0,
+            name: name,
         }
     }
 
@@ -243,40 +297,74 @@ impl Node {
             lhs: None,
             rhs: None,
             val: val,
+            name: 0 as char,
         }
     }
 }
 
-fn gen(node: &Node) {
-    if node.ty == TokenType::NUM {
-        println!("  push {}", node.val);
-        return
-    }
+fn gen_lval(node: &Option<Rc<Node>>) {
+    if let Some(node) = node {
+        let node: &Node = node.borrow();
 
-    match &node.lhs {
-        None => return,
-        Some(lhs) => gen(lhs.borrow()),
-    }
+        if node.ty != TokenType::Ident {
+            eprintln!("left value must be variable");
+            std::process::exit(1);
+        }
 
-    match &node.rhs {
-        None => return,
-        Some(rhs) => gen(rhs.borrow()),
+        let offset = ('z' as usize - node.name as usize + 1) * 8;
+        println!("  mov rax, rbp");
+        println!("  sub rax, {}", offset);
+        println!("  push rax");
     }
+}
 
-    println!("  pop rdi");
-    println!("  pop rax");
+fn gen(node: &Option<Rc<Node>>) {
+    if let Some(node) = node {
+        let node: &Node = node.borrow();
 
-    match node.ty {
-        TokenType::Symbol('+') => { println!("  add rax, rdi"); },
-        TokenType::Symbol('-') => { println!("  sub rax, rdi"); },
-        TokenType::Symbol('*') => { println!("  mul rdi"); },
-        TokenType::Symbol('/') => {
-            println!("  mov rdx, 0");
-            println!("  div rdi");
-        },
-        _ => ()
+        if node.ty == TokenType::NUM {
+            println!("  push {}", node.val);
+            return
+        }
+
+        if node.ty == TokenType::Ident {
+            let node = (*node).clone();
+            gen_lval(&Some(Rc::new(node)));
+            println!("  pop rax");
+            println!("  mov rax, [rax]");
+            println!("  push rax");
+            return
+        }
+
+        if node.ty == TokenType::Symbol('=') {
+            gen_lval(&node.lhs);
+            gen(&node.rhs);
+
+            println!("  pop rdi");
+            println!("  pop rax");
+            println!("  mov [rax], rdi");
+            println!("  push rdi");
+            return
+        }
+
+        gen(&node.lhs);
+        gen(&node.rhs);
+
+        println!("  pop rdi");
+        println!("  pop rax");
+
+        match node.ty {
+            TokenType::Symbol('+') => { println!("  add rax, rdi"); },
+            TokenType::Symbol('-') => { println!("  sub rax, rdi"); },
+            TokenType::Symbol('*') => { println!("  mul rdi"); },
+            TokenType::Symbol('/') => {
+                println!("  mov rdx, 0");
+                println!("  div rdi");
+            },
+            _ => ()
+        }
+        println!("  push rax");
     }
-    println!("  push rax");
 }
 
 fn error(token: &Token) {
@@ -294,57 +382,31 @@ fn main() {
     let mut tokenizer = Tokenizer::new(args.get(1).unwrap());
     let tokens = tokenizer.tokenize();
 
+
     let mut parser = Parser::new(tokens);
-    let ret = parser.add();
+    let ret = parser.program();
 
     if let Err(e) = ret {
         eprintln!("{}", e);
         std::process::exit(1);
     }
-    let node = ret.unwrap();
+    let code = ret.unwrap();
 
     println!(".intel_syntax noprefix");
     println!(".global main");
     println!("main:");
 
-    gen(&node);
-    /*
-    if tokens[0].ty != TokenType::NUM {
-        eprintln!("error");
-        std::process::exit(1);
+    println!("  push rbp");
+    println!("  mov rbp, rsp");
+    println!("  sub rsp, 208");
+
+    for node in code {
+        let node = Some(Rc::new(node));
+        gen(&node);
+        println!("  pop rax");
     }
 
-    println!("  mov rax, {}", tokens[0].val);
-
-    let mut i = 1;
-    loop {
-        let token = &tokens[i];
-
-        match token.ty {
-            TokenType::Symbol('+') => {
-                i += 1;
-                if tokens[i].ty != TokenType::NUM {
-                    error(&tokens[i]);
-                }
-                println!("  add rax, {}", tokens[i].val);
-                i += 1;
-                continue;
-            }
-            TokenType::Symbol('-') => {
-                i += 1;
-                if tokens[i].ty != TokenType::NUM {
-                    error(&tokens[i]);
-                }
-                println!("  sub rax, {}", tokens[i].val);
-                i += 1;
-                continue;
-            }
-            TokenType::EOF => break,
-            _ => (),
-        }
-        error(&tokens[i]);
-    }
-    */
-    println!("  pop rax");
+    println!("  mov rsp, rbp");
+    println!("  pop rbp");
     println!("  ret");
 }
