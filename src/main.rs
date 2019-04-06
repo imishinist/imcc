@@ -1,15 +1,16 @@
 use std::env;
-use std::io::{Cursor, SeekFrom, Seek};
+use std::io::{Cursor, SeekFrom, Seek, Read};
 use std::str::FromStr;
 
 
 fn strtol(p: &mut Cursor<&String>) -> Option<i32> {
     let s = p.get_ref().as_str();
     let pos = p.position() as usize;
+    let s = &s[pos..];
 
     if let Some(endp) = s.find(|c: char| !c.is_ascii_digit()) {
-        p.set_position(endp as u64);
-        let num_str = &s[pos..endp];
+        p.set_position((pos + endp) as u64);
+        let num_str = &s[0..endp];
 
         return FromStr::from_str(num_str).ok();
     }
@@ -32,5 +33,28 @@ fn main() {
     println!(".global main");
     println!("main:");
     println!("  mov rax, {}", num);
+
+    loop {
+        let pos = p.position();
+        let mut data = [0];
+
+        p.read_exact(&mut data);
+        match data[0] {
+            // +
+            43 => {
+                p.set_position(pos+1);
+                let num = strtol(&mut p).unwrap();
+                println!("  add rax, {}", num);
+            },
+            // -
+            45 => {
+                p.set_position(pos+1);
+                let num = strtol(&mut p).unwrap();
+                println!("  sub rax, {}", num);
+            },
+            _ => break
+        }
+    }
+
     println!("  ret");
 }
