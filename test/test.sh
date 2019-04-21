@@ -3,7 +3,7 @@ try() {
   expected="$1"
   input="$2"
 
-  cargo run "$input" > tmp.s 2>/dev/null
+  cargo run --release "$input" > tmp.s 2>/dev/null
   gcc -o tmp tmp.s
   ./tmp
   actual="$?"
@@ -25,5 +25,6 @@ try 15 "5*(9-6);"
 try 4 "(3+5)/2;"
 try 3 'a = 3; a;'
 try 14 'a = 3; b = 5 * 6 - 8; a + b / 2;'
+try 14 'a = 3; b = 5 * 6 - 8; return a + b / 2;'
 
 echo OK

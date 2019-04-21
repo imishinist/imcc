@@ -23,6 +23,15 @@ pub fn gen(node: &Option<Rc<Node>>) {
     if let Some(node) = node {
         let node: &Node = node.borrow();
 
+        if node.ty == TokenType::Return {
+            gen(&node.lhs);
+            println!("  pop rax");
+            println!("  mov rsp, rbp");
+            println!("  pop rbp");
+            println!("  ret");
+            return;
+        }
+
         if node.ty == TokenType::NUM {
             println!("  push {}", node.val);
             return;

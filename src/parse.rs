@@ -50,7 +50,14 @@ impl Parser {
     }
 
     fn stmt(&mut self) -> Result<Node, ParserError> {
-        let node = self.assign()?;
+        let node;
+
+        if self.consume(TokenType::Return) {
+            node = Node::new_return(TokenType::Return, Rc::new(self.assign()?));
+        } else {
+            node = self.assign()?;
+        }
+
         if !self.consume(TokenType::Symbol(';')) {
             let message = self.tokens[self.pos].input.clone();
             return Err(ParserError::UnexpectedToken(message));
@@ -149,6 +156,16 @@ impl Node {
             rhs: Some(rhs),
             val: 0,
             name: 0 as char,
+        }
+    }
+
+    fn new_return(ty: TokenType, lhs: Rc<Node>) -> Node {
+        Node {
+            ty: ty,
+            lhs: Some(lhs),
+            rhs: None,
+            val: 0,
+            name: 0 as char
         }
     }
 

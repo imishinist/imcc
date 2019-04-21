@@ -6,6 +6,7 @@ pub enum TokenType {
     NUM,
     Symbol(char),
     Ident,
+    Return,
     EOF,
 }
 
@@ -30,6 +31,14 @@ impl Token {
             ty: TokenType::Symbol(sym),
             val: 0,
             input: sym.to_string(),
+        }
+    }
+
+    fn with_return() -> Self {
+        Token {
+            ty: TokenType::Return,
+            val: 0,
+            input: "".to_string(),
         }
     }
 
@@ -89,6 +98,20 @@ impl<'a> Tokenizer<'a> {
             {
                 let token = Token::with_symbol(c);
                 tokens.push(token);
+                continue;
+            }
+
+            if c == 'r' {
+                let pp: [u8; 5] = [0,0,0,0,0];
+                let res = self.cursor.read_exact(&mut p);
+                if let Err(_e) = res {
+                    break;
+                }
+                let s = String::from_utf8_lossy(&pp);
+                if s != "eturn".to_string() {
+                    break;
+                }
+                tokens.push(Token::with_return());
                 continue;
             }
 

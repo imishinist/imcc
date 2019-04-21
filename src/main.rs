@@ -5,10 +5,6 @@ mod gen;
 mod parse;
 mod token;
 
-use gen::gen;
-use parse::Parser;
-use token::Tokenizer;
-
 fn main() {
     let args: Vec<_> = env::args().collect();
 
@@ -16,10 +12,10 @@ fn main() {
         return;
     }
 
-    let mut tokenizer = Tokenizer::new(args.get(1).unwrap());
+    let mut tokenizer = token::Tokenizer::new(args.get(1).unwrap());
     let tokens = tokenizer.tokenize();
 
-    let mut parser = Parser::new(tokens);
+    let mut parser = parse::Parser::new(tokens);
     let ret = parser.program();
 
     if let Err(e) = ret {
@@ -38,7 +34,7 @@ fn main() {
 
     for node in code {
         let node = Some(Rc::new(node));
-        gen(&node);
+        gen::gen(&node);
         println!("  pop rax");
     }
 
