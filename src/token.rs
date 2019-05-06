@@ -1,3 +1,4 @@
+use std::cmp;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::str::FromStr;
 
@@ -14,6 +15,7 @@ pub enum TokenType {
 pub struct Token {
     pub ty: TokenType,
     pub val: i32,
+    pub name: String,
     pub input: String,
 }
 
@@ -22,6 +24,7 @@ impl Token {
         Token {
             ty: TokenType::NUM,
             val: val,
+            name: "".to_string(),
             input: val.to_string(),
         }
     }
@@ -30,6 +33,7 @@ impl Token {
         Token {
             ty: TokenType::Symbol(sym),
             val: 0,
+            name: "".to_string(),
             input: sym.to_string(),
         }
     }
@@ -38,14 +42,16 @@ impl Token {
         Token {
             ty: TokenType::Return,
             val: 0,
+            name: "".to_string(),
             input: "".to_string(),
         }
     }
 
-    fn with_ident(message: String) -> Self {
+    fn with_ident(name: String, message: String) -> Self {
         Token {
             ty: TokenType::Ident,
             val: 0,
+            name,
             input: message,
         }
     }
@@ -54,6 +60,7 @@ impl Token {
         Token {
             ty: TokenType::EOF,
             val: 0,
+            name: "".to_string(),
             input: message,
         }
     }
@@ -75,15 +82,13 @@ impl<'a> Tokenizer<'a> {
         let mut tokens: Vec<Token> = Vec::with_capacity(100);
 
         loop {
-            let mut p = [0];
-            // 内部でpositionがincrementされる
-            let res = self.cursor.read_exact(&mut p);
-            if let Err(_e) = res {
-                break;
-            }
-            let c = p[0] as char;
+            let c = match self.take_char() {
+                Some(c) => c,
+                None => break,
+            };
 
             if c.is_whitespace() {
+                self.inc_cursor(1);
                 continue;
             }
 
@@ -98,31 +103,27 @@ impl<'a> Tokenizer<'a> {
             {
                 let token = Token::with_symbol(c);
                 tokens.push(token);
+                self.inc_cursor(1);
                 continue;
             }
 
-            if c == 'r' {
-                let pp: [u8; 5] = [0,0,0,0,0];
-                let res = self.cursor.read_exact(&mut p);
-                if let Err(_e) = res {
-                    break;
+            if self.strncmp("return", 6) {
+                self.inc_cursor(6);
+                if !self.take_char().unwrap().is_alphanumeric() {
+                    tokens.push(Token::with_return());
+                    continue;
+                } else {
+                    self.dec_cursor(6);
                 }
-                let s = String::from_utf8_lossy(&pp);
-                if s != "eturn".to_string() {
-                    break;
-                }
-                tokens.push(Token::with_return());
-                continue;
             }
 
             if c.is_alphabetic() {
-                tokens.push(Token::with_ident(c.to_string()));
+                self.inc_cursor(1);
+                tokens.push(Token::with_ident(c.to_string(), c.to_string()));
                 continue;
             }
 
             if c.is_ascii_digit() {
-                // positionがincrementされているので、1つ戻す
-                self.dec_cursor();
                 let num = strtol(&mut self.cursor).unwrap();
                 let token = Token::with_val(num);
                 tokens.push(token);
@@ -137,9 +138,51 @@ impl<'a> Tokenizer<'a> {
         tokens
     }
 
-    fn dec_cursor(&mut self) {
+    fn take_char(&mut self) -> Option<char> {
+        let mut p = [0];
+        // 内部でpositionがincrementされる
+        let res = self.cursor.read_exact(&mut p);
+        if let Err(_e) = res {
+            return None;
+        }
+        self.dec_cursor(1);
+        Some(p[0] as char)
+    }
+
+    fn strncmp(&mut self, str: &str, n: usize) -> bool {
+        let nn = cmp::min(
+            n,
+            self.cursor.get_ref().len() - self.cursor.position() as usize,
+        );
+        if n != nn {
+            return false;
+        }
+
+        let mut buf = vec![0; n];
+        let mut buf = buf.as_mut();
+        let res = self.cursor.read_exact(&mut buf);
+        self.dec_cursor(n as u64);
+
+        if let Err(_e) = res {
+            return false;
+        }
+
+        let s = String::from_utf8_lossy(&buf);
+        if s != str.to_string() {
+            return false;
+        }
+
+        true
+    }
+
+    fn inc_cursor(&mut self, n: u64) {
         let pos = self.cursor.position();
-        self.cursor.set_position(pos - 1);
+        self.cursor.set_position(pos + n);
+    }
+
+    fn dec_cursor(&mut self, n: u64) {
+        let pos = self.cursor.position();
+        self.cursor.set_position(pos - n);
     }
 }
 

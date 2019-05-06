@@ -165,7 +165,7 @@ impl Node {
             lhs: Some(lhs),
             rhs: None,
             val: 0,
-            name: 0 as char
+            name: 0 as char,
         }
     }
 
