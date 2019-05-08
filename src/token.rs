@@ -1,6 +1,7 @@
 use std::cmp;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::str::FromStr;
+use std::ops::Deref;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
@@ -117,9 +118,25 @@ impl<'a> Tokenizer<'a> {
                 }
             }
 
-            if c.is_alphabetic() {
+            if c.is_alphabetic() || c == '_' {
+                let mut len = 1;
                 self.inc_cursor(1);
-                tokens.push(Token::with_ident(c.to_string(), c.to_string()));
+                loop {
+                    match self.take_char() {
+                        Some(c) if c.is_alphanumeric() || c == '_' => {
+                            self.inc_cursor(1);
+                            len+=1
+                        },
+                        _ => break,
+                    }
+                }
+                self.dec_cursor(len);
+
+                let chars = self.take_chars(len as usize).unwrap();
+                self.inc_cursor(len);
+                let s = String::from_utf8_lossy(chars.deref());
+                tokens.push(Token::with_ident(s.to_string(), s.to_string()));
+
                 continue;
             }
 
@@ -139,40 +156,39 @@ impl<'a> Tokenizer<'a> {
     }
 
     fn take_char(&mut self) -> Option<char> {
-        let mut p = [0];
-        // 内部でpositionがincrementされる
-        let res = self.cursor.read_exact(&mut p);
-        if let Err(_e) = res {
-            return None;
-        }
-        self.dec_cursor(1);
-        Some(p[0] as char)
+        self.take_chars(1).map(|b| b[0] as char)
     }
 
-    fn strncmp(&mut self, str: &str, n: usize) -> bool {
+    fn take_chars(&mut self, n: usize) -> Option<Vec<u8>> {
         let nn = cmp::min(
             n,
             self.cursor.get_ref().len() - self.cursor.position() as usize,
         );
-        if n != nn {
-            return false;
+        if nn < n {
+            return None;
         }
 
         let mut buf = vec![0; n];
         let mut buf = buf.as_mut();
+
         let res = self.cursor.read_exact(&mut buf);
         self.dec_cursor(n as u64);
-
-        if let Err(_e) = res {
-            return false;
+        if let Err(_) = res {
+            return None;
         }
+        let ret: Vec<u8> = buf.to_vec();
+        Some(ret)
+    }
 
-        let s = String::from_utf8_lossy(&buf);
-        if s != str.to_string() {
-            return false;
+    fn strncmp(&mut self, str: &str, n: usize) -> bool {
+        let chars = self.take_chars(n);
+        match chars {
+            None => return false,
+            Some(chars) => {
+                let s = String::from_utf8_lossy(chars.deref());
+                return s.eq(str);
+            }
         }
-
-        true
     }
 
     fn inc_cursor(&mut self, n: u64) {
