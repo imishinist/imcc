@@ -18,6 +18,8 @@ fn main() {
     let mut parser = parse::Parser::new(tokens);
     let ret = parser.program();
 
+    let mut generator = gen::Generator::new();
+
     if let Err(e) = ret {
         eprintln!("{}", e);
         std::process::exit(1);
@@ -34,7 +36,7 @@ fn main() {
 
     for node in code {
         let node = Some(Rc::new(node));
-        gen::gen(&node);
+        generator.gen(&node);
         println!("  pop rax");
     }
 

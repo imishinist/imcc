@@ -1,7 +1,7 @@
 use std::cmp;
 use std::io::{Cursor, Read, Seek, SeekFrom};
-use std::str::FromStr;
 use std::ops::Deref;
+use std::str::FromStr;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
@@ -119,21 +119,16 @@ impl<'a> Tokenizer<'a> {
             }
 
             if c.is_alphabetic() || c == '_' {
-                let mut len = 1;
-                self.inc_cursor(1);
+                let mut chars = Vec::new();
                 loop {
                     match self.take_char() {
                         Some(c) if c.is_alphanumeric() || c == '_' => {
                             self.inc_cursor(1);
-                            len+=1
-                        },
+                            chars.push(c as u8);
+                        }
                         _ => break,
                     }
                 }
-                self.dec_cursor(len);
-
-                let chars = self.take_chars(len as usize).unwrap();
-                self.inc_cursor(len);
                 let s = String::from_utf8_lossy(chars.deref());
                 tokens.push(Token::with_ident(s.to_string(), s.to_string()));
 
