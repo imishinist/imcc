@@ -122,8 +122,8 @@ impl Parser {
         if self.tokens[self.pos].ty == TokenType::Ident {
             let pos = self.pos;
             self.pos += 1;
-            let name = self.tokens[pos].input.as_bytes()[0];
-            return Ok(Node::new_node_ident(name as char));
+            let name = self.tokens[pos].name.clone();
+            return Ok(Node::new_node_ident(name));
         }
 
         let message = self.tokens[self.pos].input.clone();
@@ -145,7 +145,7 @@ pub struct Node {
     pub lhs: Option<Rc<Node>>,
     pub rhs: Option<Rc<Node>>,
     pub val: i32,
-    pub name: char,
+    pub name: String,
 }
 
 impl Node {
@@ -155,7 +155,7 @@ impl Node {
             lhs: Some(lhs),
             rhs: Some(rhs),
             val: 0,
-            name: 0 as char,
+            name: "".to_string(),
         }
     }
 
@@ -165,11 +165,11 @@ impl Node {
             lhs: Some(lhs),
             rhs: None,
             val: 0,
-            name: 0 as char,
+            name: "".to_string(),
         }
     }
 
-    fn new_node_ident(name: char) -> Node {
+    fn new_node_ident(name: String) -> Node {
         Node {
             ty: TokenType::Ident,
             lhs: None,
@@ -185,7 +185,7 @@ impl Node {
             lhs: None,
             rhs: None,
             val: val,
-            name: 0 as char,
+            name: "".to_string(),
         }
     }
 }
